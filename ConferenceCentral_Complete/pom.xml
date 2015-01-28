@@ -11,7 +11,7 @@
 
     <properties>
         <appengine.app.version>1</appengine.app.version>
-        <appengine.target.version>1.9.4</appengine.target.version>
+        <appengine.target.version>1.9.13</appengine.target.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -27,11 +27,12 @@
             <artifactId>appengine-endpoints</artifactId>
             <version>${appengine.target.version}</version>
         </dependency>
+        <!--
         <dependency>
             <groupId>com.google.appengine</groupId>
             <artifactId>appengine-api-labs</artifactId>
             <version>${appengine.target.version}</version>
-        </dependency>
+        </dependency> -->
         <dependency>
             <groupId>javax.servlet</groupId>
             <artifactId>servlet-api</artifactId>
@@ -69,44 +70,78 @@
         </dependency>
     </dependencies>
     <build>
-        <outputDirectory>target/${project.artifactId}-${project.version}/WEB-INF/classes</outputDirectory>
-	        <plugins>
-	            <plugin>
-	                <groupId>org.apache.maven.plugins</groupId>
-	                <version>2.5.1</version>
-	                <artifactId>maven-compiler-plugin</artifactId>
-	                <configuration>
-	                    <source>1.7</source>
-	                    <target>1.7</target>
-	                </configuration>
-	            </plugin>
-	            <plugin>
-	                <groupId>org.apache.maven.plugins</groupId>
-	                <artifactId>maven-war-plugin</artifactId>
-	                <version>2.3</version>
-	                <configuration>
-	                    <webXml>${project.build.directory}/generated-sources/appengine-endpoints/WEB-INF/web.xml</webXml>
-	                    <webResources>
-	                        <resource>
-	                            <!-- this is relative to the pom.xml directory -->
-	                            <directory>${project.build.directory}/generated-sources/appengine-endpoints</directory>
-	                            <!-- the list has a default value of ** -->
-	                            <includes>
-	                                <include>WEB-INF/*.discovery</include>
-	                                <include>WEB-INF/*.api</include>
-	                            </includes>
-	                        </resource>
-	                    </webResources>
-	                </configuration>
-	            </plugin>
-	            <plugin>
-	                <groupId>com.google.appengine</groupId>
-	                <artifactId>appengine-maven-plugin</artifactId>
-	                <version>${appengine.target.version}</version>
-	                <configuration>
-	                    <enableJarClasses>false</enableJarClasses>
-	                </configuration>
-	            </plugin>
-	        </plugins>
+        <!-- for hot reload of the web application-->
+        <outputDirectory>${project.build.directory}/${project.build.finalName}/WEB-INF/classes</outputDirectory>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>versions-maven-plugin</artifactId>
+                <version>2.1</version>
+                <executions>
+                    <execution>
+                        <phase>compile</phase>
+                        <goals>
+                            <goal>display-dependency-updates</goal>
+                            <goal>display-plugin-updates</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <version>3.1</version>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <source>1.7</source>
+                    <target>1.7</target>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <version>2.4</version>
+                <configuration>
+                    <webXml>${project.build.directory}/generated-sources/appengine-endpoints/WEB-INF/web.xml</webXml>
+                    <webResources>
+                        <resource>
+                            <!-- this is relative to the pom.xml directory -->
+                            <directory>${project.build.directory}/generated-sources/appengine-endpoints</directory>
+                            <!-- the list has a default value of ** -->
+                            <includes>
+                                <include>WEB-INF/*.discovery</include>
+                                <include>WEB-INF/*.api</include>
+                            </includes>
+                        </resource>
+                    </webResources>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>com.google.appengine</groupId>
+                <artifactId>appengine-maven-plugin</artifactId>
+                <version>${appengine.target.version}</version>
+                <configuration>
+                    <enableJarClasses>false</enableJarClasses>
+                  <!--  <address>0.0.0.0</address>
+                    <port>8282</port>-->
+
+                        <!-- Comment in the below snippet to bind to all IPs instead of just localhost -->
+                    <!-- address>0.0.0.0</address>
+                    <port>8080</port -->
+                    <!-- Comment in the below snippet to enable local debugging with a remove debugger
+                         like those included with Eclipse or IntelliJ -->
+                    <!-- jvmFlags>
+                      <jvmFlag>-agentlib:jdwp=transport=dt_socket,address=8000,server=y,suspend=n</jvmFlag>
+                    </jvmFlags -->
+                </configuration>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>endpoints_get_discovery_doc</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
     </build>
+
 </project>

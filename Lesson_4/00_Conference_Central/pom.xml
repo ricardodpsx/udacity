@@ -101,6 +101,7 @@
                 <version>${appengine.target.version}</version>
                 <configuration>
                     <enableJarClasses>false</enableJarClasses>
+                     <port>8082</port>
                 </configuration>
                 <executions>
                     <execution>

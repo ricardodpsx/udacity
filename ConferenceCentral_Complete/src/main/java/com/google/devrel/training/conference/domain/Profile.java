@@ -1,7 +1,10 @@
 package com.google.devrel.training.conference.domain;
 
+import com.google.api.server.spi.config.AnnotationBoolean;
+import com.google.api.server.spi.config.ApiResourceProperty;
 import com.google.common.collect.ImmutableList;
 import com.google.devrel.training.conference.form.ProfileForm.TeeShirtSize;
+import com.googlecode.objectify.Key;
 import com.googlecode.objectify.annotation.Entity;
 import com.googlecode.objectify.annotation.Id;
 
@@ -39,6 +42,11 @@ public class Profile {
      * Keys of the conferences that this user registers to attend.
      */
     private List<String> conferenceKeysToAttend = new ArrayList<>(0);
+
+    private List<String> sessionKeysWishList = new ArrayList<>(0);
+
+
+    List<String> sessionsToSpeakKeys = new ArrayList<>();
 
     /**
      * Just making the default constructor private.
@@ -124,6 +132,45 @@ public class Profile {
     public void addToConferenceKeysToAttend(String conferenceKey) {
         conferenceKeysToAttend.add(conferenceKey);
     }
+
+    public void addSessionKeyWishList(String conferenceKey) {
+        sessionKeysWishList.add(conferenceKey);
+    }
+    @ApiResourceProperty(ignored = AnnotationBoolean.TRUE)
+    public List< Key<Session> > getSessionKeysWishList(){
+
+        List<Key<Session>> keys = new ArrayList<>();
+
+        for(String k : sessionKeysWishList) {
+            keys.add(Key.<Session>create(k));
+        }
+        return keys;
+    }
+    public List<String> getSessionKeysWishListWebsafe(){
+        return sessionKeysWishList;
+    }
+
+
+    public void addSessionToSpeakKey(String sessionKey) {
+        sessionsToSpeakKeys.add(sessionKey);
+    }
+
+    @ApiResourceProperty(ignored = AnnotationBoolean.TRUE)
+    public List< Key<Session> > getSessionsToSpeakKeys(){
+
+        List<Key<Session>> keys = new ArrayList<>();
+
+        for(String k : sessionsToSpeakKeys) {
+            keys.add(Key.<Session>create(k));
+        }
+        return keys;
+    }
+
+    public List<String> getSessionsToSpeakKeysWebsafe(){
+        return sessionsToSpeakKeys;
+    }
+
+
 
     /**
      * Remove the conferenceId from conferenceIdsToAttend.

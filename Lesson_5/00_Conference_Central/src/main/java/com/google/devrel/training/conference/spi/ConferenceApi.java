@@ -16,11 +16,14 @@ import com.google.api.server.spi.response.ConflictException;
 import com.google.api.server.spi.response.ForbiddenException;
 import com.google.api.server.spi.response.NotFoundException;
 import com.google.api.server.spi.response.UnauthorizedException;
+import com.google.appengine.api.memcache.MemcacheService;
+import com.google.appengine.api.memcache.MemcacheServiceFactory;
 import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.QueueFactory;
 import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
 import com.google.devrel.training.conference.Constants;
+import com.google.devrel.training.conference.domain.Announcement;
 import com.google.devrel.training.conference.domain.Conference;
 import com.google.devrel.training.conference.domain.Profile;
 import com.google.devrel.training.conference.form.ConferenceForm;
@@ -210,6 +213,14 @@ public class ConferenceApi {
         // TODO (Lesson 4)
         // Save Conference and Profile Entities
          ofy().save().entities(conference, profile).now();
+         
+         Queue queue = QueueFactory.getDefaultQueue();
+         
+         queue.add(ofy().getTransaction(), TaskOptions.Builder.withUrl("/crons/send_confirmation_email")
+        		 .param("email", "ricardodpsx@gmail.com")
+        		 .param("conferenceInfo",conference.getName())
+        		 );
+         
 
          return conference;
          }
@@ -547,6 +558,12 @@ public class ConferenceApi {
             keysToAttend.add(Key.<Conference>create(keyString));
         }
         return ofy().load().keys(keysToAttend).values();
+    }
+    
+    public Announcement getAnnouncement(){
+    	MemcacheService memcache = MemcacheServiceFactory.getMemcacheService();
+    	
+    	return new Announcement((String) memcache.get(Constants.MEMCACHE_ANNOUNCEMENTS_KEY));
     }
 
 }

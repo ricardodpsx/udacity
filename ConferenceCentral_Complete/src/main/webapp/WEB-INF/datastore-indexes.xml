@@ -106,4 +106,14 @@
         <property name="name" direction="asc"/>
     </datastore-index>
 
+    <datastore-index kind="Session" ancestor="false" source="manual">
+        <property name="startDate" direction="asc"/>
+        <property name="duration" direction="asc"/>
+    </datastore-index>
+
+    <datastore-index kind="Session" ancestor="false" source="manual">
+        <property name="sessionType" direction="asc"/>
+        <property name="startTime" direction="asc"/>
+    </datastore-index>
+
 </datastore-indexes>

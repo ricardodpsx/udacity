@@ -12,25 +12,26 @@ import com.google.api.server.spi.response.NotFoundException;
 import com.google.api.server.spi.response.UnauthorizedException;
 import com.google.appengine.api.memcache.MemcacheService;
 import com.google.appengine.api.memcache.MemcacheServiceFactory;
+import com.google.appengine.api.oauth.OAuthRequestException;
 import com.google.appengine.api.taskqueue.Queue;
 import com.google.appengine.api.taskqueue.QueueFactory;
 import com.google.appengine.api.taskqueue.TaskOptions;
 import com.google.appengine.api.users.User;
 import com.google.devrel.training.conference.Constants;
-import com.google.devrel.training.conference.domain.Announcement;
-import com.google.devrel.training.conference.domain.AppEngineUser;
-import com.google.devrel.training.conference.domain.Conference;
-import com.google.devrel.training.conference.domain.Profile;
+import com.google.devrel.training.conference.domain.*;
 import com.google.devrel.training.conference.form.ConferenceForm;
 import com.google.devrel.training.conference.form.ConferenceQueryForm;
 import com.google.devrel.training.conference.form.ProfileForm;
 import com.google.devrel.training.conference.form.ProfileForm.TeeShirtSize;
+import com.google.devrel.training.conference.form.SessionForm;
 import com.googlecode.objectify.Key;
 import com.googlecode.objectify.Objectify;
 import com.googlecode.objectify.Work;
+import com.googlecode.objectify.cmd.Query;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.logging.Logger;
 
@@ -180,6 +181,9 @@ public class ConferenceApi {
         }
         return ofy().load().key(Key.create(Profile.class, getUserId(user))).now();
     }
+
+
+
 
     /**
      * Creates or updates a Profile object associated with the given user object.
@@ -526,4 +530,293 @@ public class ConferenceApi {
         // NotFoundException is actually thrown here.
         return new WrappedBoolean(result.getResult());
     }
+
+    /**Task 1: Add Sessions to a Conference **/
+
+     @ApiMethod(name = "createSession", path = "conference/{websafeConferenceKey}/session", httpMethod = HttpMethod.POST)
+    public Session createSession(final User user,
+                                 @Named("websafeConferenceKey") final String websafeConferenceKey,
+                                 final SessionForm sessionForm)
+            throws UnauthorizedException, OAuthRequestException, ConflictException, NotFoundException, ForbiddenException {
+
+        if (user == null) {
+            throw new UnauthorizedException("Authorization required");
+        }
+
+        final Key<Conference> conferenceKey = Key.create(websafeConferenceKey);
+        final Key<Session> sessionKey = factory().allocateId(conferenceKey, Session.class);
+
+        TxResult<Session> result = ofy().transact(
+                new Work<TxResult<Session>>() {
+
+                    @Override
+                    public TxResult<Session> run() {
+
+                        Conference conference = ofy().load().now(conferenceKey);
+
+
+                        if (!conference.getOrganizerUserId().equals(getUserId(user))) {
+                            return new TxResult<Session>(new ForbiddenException("Only the conference organizer can add sessions"));
+                        }
+
+
+                        Session session = new Session(conferenceKey,
+                                sessionKey.getId(),
+                                sessionForm.getSessionName(),
+                                sessionForm.getSpeakerProfileKeys(),
+                                sessionForm.getStartDate(),
+                                sessionForm.getDuration(),
+                                sessionForm.getLocation(),
+                                sessionForm.getSessionType(),
+                                sessionForm.getHighlights(),
+                                sessionForm.getStartTime()
+                        );
+
+
+
+                        Collection<Profile> profiles = ofy().load().keys(session.getSpeakerProfileKeys()).values();
+
+
+                        if (profiles.size() == 0)
+                            return new TxResult<Session>(new NotFoundException("Invalid Profile Keys"));
+
+                        Key<Session> sessionKey = ofy().save().entity(session).now();
+
+                        //Associating Profile with Sessions
+                        for (Profile profile : profiles) {
+                            profile.addSessionToSpeakKey(sessionKey.getString());
+                        }
+
+                        ofy().save().entities(profiles).now();
+
+                        List<Session> conferenceSessions = getConferenceSessions(websafeConferenceKey);
+                        for(String speakerKey : sessionForm.getSpeakerProfileKeys()) {
+                            featureSpeaker(conferenceSessions, speakerKey);
+                        }
+
+
+                        return new TxResult<Session>(session);
+                    }
+                }
+
+        );
+
+
+
+        return result.getResult();
+    }
+
+    /**
+     * Count the number of times the speaker is in a session in a given conference.
+     *
+     * I decided to use linear search here (instead of some fancy indexed query) because
+     * the complexity of search for a speaker will be O(sessions*users)
+     * and as it is only for ONE conference so the number won't be too large to justify
+     * a more complex query ( I don't think a conference has more than 1000 sessions and 1000 speakers)
+     *
+     * @param conferenceSessions
+     * @param websafeSpeakerKey
+     * @return1
+     */
+    private int featureSpeaker(
+            List<Session> conferenceSessions, String websafeSpeakerKey) {
+
+
+
+        int count = 0;
+
+        List<Session> speakerSessions = new ArrayList<>();
+
+        for(Session session : conferenceSessions) {
+
+            if(session.hasSpeaker(websafeSpeakerKey)) {
+                speakerSessions.add(session);
+            }
+        }
+
+        if(speakerSessions.size() >= 2) {
+            Profile speaker = ofy().load().key(Key.<Profile>create(websafeSpeakerKey)).now();
+            addFeaturedSpeaker(speaker, speakerSessions);
+        }
+
+        return count;
+    }
+
+
+    @ApiMethod(name = "getConferenceSessions",
+            path = "conference/{websafeConferenceKey}/session",
+            httpMethod = HttpMethod.GET)
+    public List<Session> getConferenceSessions( @Named("websafeConferenceKey")
+                                            final String websafeConferenceKey) {
+
+        return ofy().load().type(Session.class)
+                .ancestor( Key.create(websafeConferenceKey))
+                .order("name")
+                .list();
+    }
+
+
+
+
+
+    @ApiMethod(name = "getConferenceSessionByType",
+            path = "conference/{websafeConferenceKey}/session/by-type",
+            httpMethod = HttpMethod.GET)
+    public List<Session> getConferenceSessionsByType(
+            @Named("websafeConferenceKey") final String websafeConferenceKey,
+            @Named("sessionType") Session.SessionType sessionType) {
+
+        return ofy().load().type(Session.class)
+                .ancestor(Key.create(websafeConferenceKey))
+                .filter("sessionType", sessionType)
+                .list();
+    }
+
+    @ApiMethod(name = "getSessionsBySpeaker",
+            path = "conference/session/by-speaker",
+            httpMethod = HttpMethod.GET)
+    public Collection<Session> getSessionsBySpeaker(@Named("speakerProfileKey") String speakerProfileKey) {
+
+        Profile p = ofy().load().key(Key.<Profile>create(speakerProfileKey)).now();
+        return ofy().load().keys(p.getSessionsToSpeakKeys()).values();
+    }
+
+
+    /**Task 2: Add Sessions to User Wishlist**/
+    @ApiMethod(name = "addSessionToWishlist",
+            path = "conference/session/{websafeSessionKey}/wishlist",
+            httpMethod = HttpMethod.PUT)
+    public WrappedBoolean addSessionToWishlist(
+            final User user,
+            @Named("websafeSessionKey") final String websafeSessionKey
+    ) throws NotFoundException, UnauthorizedException {
+        Session s = ofy().load().key(Key.<Session>create(websafeSessionKey)).now();
+
+        //Validating if the session actually exists
+        if(s == null) {
+            throw new NotFoundException("No Session found with the key: " + websafeSessionKey);
+        }
+
+        Profile profile = getProfile(user);
+
+        profile.addSessionKeyWishList(websafeSessionKey);
+
+        ofy().save().entities(profile).now();
+
+
+        return new WrappedBoolean(true);
+
+    }
+
+    @ApiMethod(name = "getSessionsInWishlist",
+            path = "conference/session/wishlist",
+            httpMethod = HttpMethod.GET)
+    public Collection<Session> getSessionsInWishlist(User user) throws UnauthorizedException {
+
+        Profile profile = getProfile(user);
+        return ofy().load().keys(profile.getSessionKeysWishList()).values();
+    }
+
+
+
+    //Task 3: Work on indexes and queries
+    //Come up with 2 additional queries
+
+    @ApiMethod(name = "getSessionsByDates",
+            path = "conference/session/by-dates/{dateFrom}/{dateTo}",
+            httpMethod = HttpMethod.GET)
+    public Collection<Session> getSessionsByDates(
+            @Named("dateFrom") final Date dateFrom,
+            @Named("dateTo") final Date dateTo) {
+
+        List<Session> sessions = ofy().load().type(Session.class)
+                .filter("startDate >= ", dateFrom)
+                .filter("startDate <= ", dateTo)
+                .order("startDate").list();
+
+        return sessions;
+    }
+
+    /**
+     * Conferences in the specified date that last lest less/equal than the given duration
+     * @param date
+     * @param duration
+     * @return
+     */
+
+    @ApiMethod(name = "getSessionsByDateAndDuration",
+            path = "conference/session/by-date-duration/{date}/{duration}",
+            httpMethod = HttpMethod.GET)
+    public Collection<Session> getSessionsByDateAndDuration(
+            @Named("date") final Date date,
+            @Named("duration") final int duration) {
+
+        List<Session> sessions = ofy().load().type(Session.class)
+                .filter("startDate = ", date)
+                .filter("duration <= ", duration)
+                .order("duration").list();
+
+        return sessions;
+    }
+
+    /**
+     * Let’s say that you don't like workshops and you don't like sessions after 7 pm.
+     * How would you handle a query for all non-workshop sessions before 7 pm?
+     * What is the problem for implementing this query? What ways to solve it did you think of?
+
+     Problem. I had the StartTime as a String and that was a problem
+     */
+    @ApiMethod(name = "getSessionsNotOfTypeAndUpToTime",
+            path = "conference/session/not-type-time/{notSessionType}/{beforeTime}",
+            httpMethod = HttpMethod.GET)
+    public Collection<Session> getSessionsNotOfTypeAndUpToTime(
+            @Named("notSessionType") final Session.SessionType notSessionType,
+            @Named("beforeTime") final String beforeTime) {
+
+        Query<Session> query = ofy().load().type(Session.class);
+
+        ArrayList<Session.SessionType> sessionTypes = new ArrayList<>();
+        for(Session.SessionType s : Session.SessionType.values() ) {
+            if(!s.equals(notSessionType))
+                sessionTypes.add(s);
+        }
+
+        return  query
+                .filter("sessionType IN ", sessionTypes)
+                .filter("startTime < ", Session.toTimeInteger(beforeTime))
+                .list();
+    }
+
+
+    private void addFeaturedSpeaker(Profile speaker, List<Session> sessions) {
+        MemcacheService memcacheService = MemcacheServiceFactory.getMemcacheService();
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("Featured Speaker: " + speaker.getDisplayName() + " will be in sessions: " );
+
+        for(Session s : sessions) {
+            sb.append(s.getName() + "\n");
+        }
+
+        memcacheService.put(Constants.FEATURED_SPEAKERS_KEY, sb.toString()     );
+
+    }
+
+    @ApiMethod(
+            name = "getFeaturedSpeaker",
+            path = "featured-speaker",
+            httpMethod = HttpMethod.GET
+    )
+    public Announcement getFeaturedSpeaker() {
+        MemcacheService memcacheService = MemcacheServiceFactory.getMemcacheService();
+        Object message = memcacheService.get(Constants.FEATURED_SPEAKERS_KEY);
+        if (message != null) {
+            return new Announcement(message.toString());
+        }
+        return null;
+    }
+
+
+
+
 }

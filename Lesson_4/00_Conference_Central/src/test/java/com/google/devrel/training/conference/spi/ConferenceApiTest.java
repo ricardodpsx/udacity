@@ -7,8 +7,10 @@ import com.google.api.server.spi.response.UnauthorizedException;
 import com.google.appengine.api.users.User;
 import com.google.appengine.tools.development.testing.LocalDatastoreServiceTestConfig;
 import com.google.appengine.tools.development.testing.LocalServiceTestHelper;
+import com.google.devrel.training.conference.domain.Conference;
 // import com.google.devrel.training.conference.domain.Conference;
 import com.google.devrel.training.conference.domain.Profile;
+import com.google.devrel.training.conference.form.ConferenceForm;
 // import com.google.devrel.training.conference.form.ConferenceForm;
 import com.google.devrel.training.conference.form.ProfileForm;
 import com.google.devrel.training.conference.form.ProfileForm.TeeShirtSize;
@@ -168,8 +170,8 @@ public class ConferenceApiTest {
         assertEquals(DISPLAY_NAME, profile.getDisplayName());
     }
 
-
-    /*
+/*
+    
     @Test
     public void testCreateConference() throws Exception {
         DateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
@@ -201,8 +203,8 @@ public class ConferenceApiTest {
         String displayName = EMAIL.substring(0, EMAIL.indexOf("@"));
         assertEquals(displayName, profile.getDisplayName());
     }
-    */
-
+    
+*/
     /*
     @Test
     public void testGetConferencesCreated() throws Exception {
